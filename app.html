@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GearMath - what every gear actually does</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#0d1517; color:#e9f2f2; min-height:100vh; }
+  .wrap { max-width:900px; margin:0 auto; padding:28px 20px 80px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+  header h1 { font-size:22px; } header h1 span { color:#5bc8c0; }
+  header a { color:#8aa3a1; text-decoration:none; font-size:14px; }
+  .card { background:#122024; border:1px solid #25444a; border-radius:12px; padding:18px; margin-bottom:18px; }
+  label { font-size:12px; color:#8aa3a1; display:block; margin-bottom:4px; }
+  input, select { background:#0d1517; border:1px solid #2f565e; border-radius:8px; color:#e9f2f2; padding:9px 10px; font-size:14px; width:100%; }
+  button { background:#5bc8c0; border:none; color:#0a2220; font-weight:700; padding:11px 22px; border-radius:9px; font-size:14px; cursor:pointer; }
+  .row4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+  h3 { font-size:14px; color:#bccfd0; margin-bottom:10px; }
+  .verdict { background:#0f272a; border:1px solid #2b565c; border-radius:10px; padding:14px 16px; margin-bottom:14px; font-size:15px; line-height:1.6; }
+  .verdict b { color:#5bc8c0; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .stat { background:#0d1517; border:1px solid #25444a; border-radius:10px; padding:12px; }
+  .stat .v { font-size:20px; font-weight:700; color:#fff; }
+  .stat .k { font-size:11px; color:#8aa3a1; margin-top:2px; line-height:1.4; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:right; padding:6px 8px; border-bottom:1px solid #1e3a40; }
+  th { color:#8aa3a1; font-weight:600; }
+  td:first-child, th:first-child { text-align:left; }
+  tr.dup td { color:#8a8486; }
+  tr.dup td:first-child::after { content:' (dup)'; font-size:10px; color:#b08968; }
+  .tblwrap { max-height:400px; overflow-y:auto; }
+  .err { color:#ff8a8a; font-size:13px; margin-top:8px; }
+  .note { color:#5d7371; font-size:12px; margin-top:10px; }
+  @media (max-width:640px){ .row4 { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Gear<span>Math</span></h1><a href="index.html">home</a></header>
+
+  <div class="card">
+    <h3>Your drivetrain</h3>
+    <div class="row4">
+      <div><label>Wheel</label><select id="wheel"><option value="700c">700c road</option><option value="27.5">27.5" MTB</option><option value="29er">29er</option><option value="26">26" classic</option><option value="20">20" folding</option></select></div>
+      <div><label>Chainrings (comma)</label><input id="rings" value="50,34"></div>
+      <div><label>Cassette cogs (comma)</label><input id="cogs" value="11,12,13,14,15,17,19,21,23,25,28"></div>
+      <div><label>Target speed (km/h)</label><input id="tgt" type="number" value="30"></div>
+    </div>
+    <button id="go">Map every gear</button>
+    <div class="err" id="err"></div>
+    <div class="note">Teeth counts, comma-separated, any order. Common setups: road compact 50/34 with 11-28; 1x MTB 32 with 11-52; hybrid 48/38/28 with 11-34.</div>
+  </div>
+
+  <div id="out" style="display:none">
+    <div class="verdict" id="verdict"></div>
+    <div class="card">
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="card">
+      <h3>Every combo, easiest first</h3>
+      <div class="tblwrap"><table id="tbl">
+        <thead><tr><th>Combo</th><th>Gear inches</th><th>Development</th><th>Speed @ 90 rpm</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="note">Grey rows marked dup repeat a ratio you already have on another chainring (within 3%) - the "22 speeds" discount.</div>
+    </div>
+  </div>
+    <div class="card">
+      <h3>Gear inches, in one paragraph</h3>
+      <div class="note" style="font-size:13px;line-height:1.8">
+        Gear inches ask: "if the pedals were bolted straight to the wheel, how big would that wheel be?"
+        Chainring divided by cog, times wheel diameter. A 50x11 on a road bike is a 123-inch gear - one
+        crank turn rolls you almost 10 meters, which is why it flies on the flat and stalls on a climb.
+        A 34x28 is 33 inches: one turn, 2.7 meters, slow but unstoppable uphill. Development is the metric
+        version of the same idea (meters per crank revolution), and speed is development times cadence.
+        The overlap table above is the practical part: on a 2x setup several "different" gears repeat a
+        ratio you already own, which is why riders cross-chain without noticing. If your easiest gear
+        still isn't easy enough for your hills, the fix isn't fitness - it's a bigger cog or a smaller
+        ring, and the range ratio tells you exactly how much you gain.
+      </div>
+    </div>
+  </div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  var F = ['wheel','rings','cogs','tgt'];
+  var KEY = 'gearmath-settings';
+  function save(){ var o={}; F.forEach(function(f){o[f]=document.getElementById(f).value;}); try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){} }
+  function load(){ try{ var o=JSON.parse(localStorage.getItem(KEY)||'null'); if(o) F.forEach(function(f){ if(o[f]!==undefined) document.getElementById(f).value=o[f]; }); }catch(e){} }
+  function parseList(s){ return s.split(',').map(function(x){ return x.trim(); }).filter(function(x){ return x !== ''; }); }
+  function run(){
+    var errEl = document.getElementById('err'); errEl.textContent = '';
+    var o = {
+      wheel: document.getElementById('wheel').value,
+      chainrings: parseList(document.getElementById('rings').value),
+      cogs: parseList(document.getElementById('cogs').value),
+      targetKmh: document.getElementById('tgt').value
+    };
+    var r;
+    try { r = GearMathEngine.analyze(o); } catch(e){ errEl.textContent = e.message; return; }
+    save();
+    var v = document.getElementById('verdict');
+    var unique = r.rows.length - r.overlapCount;
+    var msg = 'You have <b>' + r.rows.length + ' combos but ' + unique + ' are genuinely distinct</b>. ';
+    msg += 'Easiest: <b>' + r.easiest.chainring + '/' + r.easiest.cog + '</b> (' + r.easiest.gearInches + '", ' + r.easiest.speed90 + ' km/h at 90 rpm). ';
+    msg += 'Hardest: <b>' + r.hardest.chainring + '/' + r.hardest.cog + '</b> (' + r.hardest.gearInches + '", ' + r.hardest.speed90 + ' km/h). ';
+    msg += 'Holding ' + r.targetKmh + ' km/h in the hardest gear means spinning <b>' + r.cadenceForTargetInHardest + ' rpm</b>.';
+    v.innerHTML = msg;
+    var s = document.getElementById('stats');
+    s.innerHTML = '';
+    var cells = [
+      [r.rows.length, 'total combos'],
+      [unique, 'genuinely distinct gears'],
+      [r.overlapCount, 'duplicate ratios'],
+      [r.rangeRatio + 'x', 'hardest vs easiest ratio'],
+      [r.easiest.speed90 + ' km/h', 'climbing speed in easiest'],
+      [r.cadenceForTargetInHardest + ' rpm', 'cadence for ' + r.targetKmh + ' km/h in hardest']
+    ];
+    cells.forEach(function(c){
+      var d = document.createElement('div'); d.className = 'stat';
+      d.innerHTML = '<div class="v">' + c[0] + '</div><div class="k">' + c[1] + '</div>';
+      s.appendChild(d);
+    });
+    var tb = document.querySelector('#tbl tbody'); tb.innerHTML = '';
+    r.rows.forEach(function(row){
+      var tr = document.createElement('tr');
+      if (row.overlap) tr.className = 'dup';
+      tr.innerHTML = '<td>' + row.chainring + ' / ' + row.cog + '</td><td>' + row.gearInches + '"</td><td>' + row.developmentM + ' m</td><td>' + row.speed90 + ' km/h</td>';
+      tb.appendChild(tr);
+    });
+    document.getElementById('out').style.display = 'block';
+  }
+  document.getElementById('go').addEventListener('click', run);
+  load();
+})();
+</script>
+</body>
+</html>
